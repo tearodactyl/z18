@@ -133,7 +133,7 @@ echo "server=1" > ~/.zero/zero.conf
 ```
 ### To use the full node RPC interface
 ```
-echo "rpcuser=<YOUR_USER_NAME>" > ~/.zero/zero.conf
+echo "rpcuser=<YOUR_USER_NAME>" >> ~/.zero/zero.conf
 echo "rpcpassword=`head -c 32 /dev/urandom | base64`" >> ~/.zero/zero.conf
 echo "rpcport=23801" >> ~/.zero/zero.conf
 ```
