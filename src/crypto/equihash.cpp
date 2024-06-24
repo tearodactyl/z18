@@ -1,7 +1,7 @@
 // Copyright (c) 2016 Jack Grigg
 // Copyright (c) 2016 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 // Implementation of the Equihash Proof-of-Work algorithm.
 //
@@ -19,6 +19,9 @@
 #include "compat/endian.h"
 #include "crypto/equihash.h"
 #include "util.h"
+#ifndef __linux__
+#include "compat/endian.h"
+#endif
 
 #include <algorithm>
 #include <iostream>
@@ -26,7 +29,7 @@
 
 #include <boost/optional.hpp>
 
-EhSolverCancelledException solver_cancelled;
+static EhSolverCancelledException solver_cancelled;
 
 template<unsigned int N, unsigned int K>
 int Equihash<N,K>::InitialiseState(eh_HashState& base_state)

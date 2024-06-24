@@ -40,11 +40,25 @@ In order to run the example Python client scripts in contrib/ one must
 also install *python-qpid-proton*, though this is not necessary for
 daemon operation.
 
+## Security WARNING
+
+Enabling this feature even on the loopback interface only (e.g. binding
+it to localhost or 127.0.0.1) will still expose it to the wilds of the
+Internet, because of an attack vector called DNS rebinding. DNS
+rebinding allows an attacker located remotely on the Internet to trick
+applications that you're running on the same computer as Zcashd to
+contact your supposedly localhost-only AMQP port, then, depending on the
+program they may be able to attempt to attack it.
+
+Do not enable this feature unless you are sure that you know what you
+are doing, and that you have a strong reason for thinking that you are
+not vulnerable to this type of attack.
+
 ## Enabling
 
 By default, the AMQP feature is automatically compiled in if the
 necessary prerequisites are found.  To disable, use --disable-proton
-during the *configure* step of building zcashd:
+during the *configure* step of building zerod:
 
     $ ./configure --disable-proton (other options)
 
@@ -69,13 +83,13 @@ The address must be a valid AMQP address, where the same address can be
 used in more than notification.  Note that SSL and SASL addresses are
 not currently supported.
 
-Launch zcashd like this:
+Launch zerod like this:
 
-    $ zcashd -amqppubhashtx=amqp://127.0.0.1:5672
+    $ zerod -amqppubhashtx=amqp://127.0.0.1:5672
 
 Or this:
 
-    $ zcashd -amqppubhashtx=amqp://127.0.0.1:5672 \
+    $ zerod -amqppubhashtx=amqp://127.0.0.1:5672 \
         -amqppubrawtx=amqp://127.0.0.1:5672 \
         -amqppubrawblock=amqp://127.0.0.1:5672 \
         -amqppubhashblock=amqp://127.0.0.1:5672 \
@@ -96,12 +110,12 @@ AMQP server listening for messages.
 
 ## Remarks
 
-From the perspective of zcashd, the local end of an AMQP link is write-only.
+From the perspective of zerod, the local end of an AMQP link is write-only.
 
 No information is broadcast that wasn't already received from the public
 P2P network.
 
-No authentication or authorization is done on peers that zcashd connects
+No authentication or authorization is done on peers that zerod connects
 to; it is assumed that the AMQP link is exposed only to trusted entities,
 using other means such as firewalling.
 
@@ -114,10 +128,10 @@ Note that when the block chain tip changes, a reorganisation may occur
 and just the tip will be notified. It is up to the subscriber to
 retrieve the chain from the last known block to the new tip.
 
-At present, zcashd does not try to resend a notification if there was
+At present, zerod does not try to resend a notification if there was
 a problem confirming receipt.  Support for delivery guarantees such as
 *at-least-once* and *exactly-once* will be added in in a future update.
 
-Currently, zcashd appends an up-counting sequence number to each notification
+Currently, zerod appends an up-counting sequence number to each notification
 which allows listeners to detect lost notifications.
 

@@ -1,7 +1,7 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #include "chainparamsbase.h"
 
@@ -17,7 +17,7 @@ class CBaseMainParams : public CBaseChainParams
 public:
     CBaseMainParams()
     {
-        nRPCPort = 23801;
+        nRPCPort = 23811;
     }
 };
 static CBaseMainParams mainParams;
@@ -25,12 +25,12 @@ static CBaseMainParams mainParams;
 /**
  * Testnet (v3)
  */
-class CBaseTestNetParams : public CBaseMainParams
+class CBaseTestNetParams : public CBaseChainParams
 {
 public:
     CBaseTestNetParams()
     {
-        nRPCPort = 23802;
+        nRPCPort = 23812;
         strDataDir = "testnet3";
     }
 };
@@ -39,11 +39,12 @@ static CBaseTestNetParams testNetParams;
 /*
  * Regression test
  */
-class CBaseRegTestParams : public CBaseTestNetParams
+class CBaseRegTestParams : public CBaseChainParams
 {
 public:
     CBaseRegTestParams()
     {
+        nRPCPort = 23813;
         strDataDir = "regtest";
     }
 };

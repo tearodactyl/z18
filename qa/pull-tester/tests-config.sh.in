@@ -1,7 +1,7 @@
 #!/bin/bash
 # Copyright (c) 2013-2014 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
-# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 BUILDDIR="@abs_top_builddir@"
 EXEEXT="@EXEEXT@"
@@ -13,6 +13,6 @@ EXEEXT="@EXEEXT@"
 @ENABLE_ZMQ_TRUE@ENABLE_ZMQ=1
 @ENABLE_PROTON_TRUE@ENABLE_PROTON=1
 
-REAL_BITCOIND="$BUILDDIR/src/zcashd${EXEEXT}"
-REAL_BITCOINCLI="$BUILDDIR/src/zcash-cli${EXEEXT}"
+REAL_BITCOIND="$BUILDDIR/src/zerod${EXEEXT}"
+REAL_BITCOINCLI="$BUILDDIR/src/zero-cli${EXEEXT}"
 

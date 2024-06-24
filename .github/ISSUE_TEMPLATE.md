@@ -1,6 +1,6 @@
 <!--- Remove text and sections that do not apply -->
 
-This issue tracker is only for technical issues related to zcashd.
+This issue tracker is only for technical issues related to zerod.
 
 General ZERO questions and/or support requests and are best directed to the https://github.com/zerocurrency/zero
 
@@ -22,7 +22,7 @@ Tell us what should happen
 Tell us what happens instead including any noticable error output (any messages displayed on-screen when e.g. a crash occurred)
 
 ### The version of Zcash you were using:
-Run `zcashd --version` to find out
+Run `zerod --version` to find out
 
 ### Machine specs:
 - OS name + version:
@@ -31,7 +31,9 @@ Run `zcashd --version` to find out
 - Disk size:
 - Disk Type (HD/SDD):
 - Linux kernel version (uname -a):
-- Compiler version (gcc -version):
+- Compiler version (gcc --version):
+- Linker version (ld -v):
+- Assembler version (as --version):
 
 ### Any extra information that might be useful in the debugging process.
 This includes the relevant contents of `~/.zero/debug.log`. You can paste raw text, attach the file directly in the issue or link to the text via a pastebin type site.

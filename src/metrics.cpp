@@ -1,12 +1,13 @@
 // Copyright (c) 2016 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #include "metrics.h"
 
 #include "chainparams.h"
 #include "checkpoints.h"
 #include "main.h"
+#include "timedata.h"
 #include "ui_interface.h"
 #include "util.h"
 #include "utiltime.h"
@@ -16,7 +17,14 @@
 #include <boost/thread.hpp>
 #include <boost/thread/synchronized_value.hpp>
 #include <string>
+
+#ifdef WIN32
+#include <io.h>
+#include <windows.h>
+#else
 #include <sys/ioctl.h>
+#endif
+
 #include <unistd.h>
 
 void AtomicTimer::start()
@@ -64,21 +72,21 @@ double AtomicTimer::rate(const AtomicCounter& count)
     return duration > 0 ? (double)count.get() / duration : 0;
 }
 
-CCriticalSection cs_metrics;
+static CCriticalSection cs_metrics;
 
-boost::synchronized_value<int64_t> nNodeStartTime;
-boost::synchronized_value<int64_t> nNextRefresh;
+static boost::synchronized_value<int64_t> nNodeStartTime;
+static boost::synchronized_value<int64_t> nNextRefresh;
 AtomicCounter transactionsValidated;
 AtomicCounter ehSolverRuns;
 AtomicCounter solutionTargetChecks;
-AtomicCounter minedBlocks;
+static AtomicCounter minedBlocks;
 AtomicTimer miningTimer;
 
-boost::synchronized_value<std::list<uint256>> trackedBlocks;
+static boost::synchronized_value<std::list<uint256>> trackedBlocks;
 
-boost::synchronized_value<std::list<std::string>> messageBox;
-boost::synchronized_value<std::string> initMessage;
-bool loaded = false;
+static boost::synchronized_value<std::list<std::string>> messageBox;
+static boost::synchronized_value<std::string> initMessage;
+static bool loaded = false;
 
 extern int64_t GetNetworkHashPS(int lookup, int height);
 
@@ -104,34 +112,38 @@ double GetLocalSolPS()
     return miningTimer.rate(solutionTargetChecks);
 }
 
-int EstimateNetHeightInner(int height, int64_t tipmediantime,
-                           int heightLastCheckpoint, int64_t timeLastCheckpoint,
-                           int64_t genesisTime, int64_t targetSpacing)
+std::string WhichNetwork()
 {
-    // We average the target spacing with the observed spacing to the last
-    // checkpoint (either from below or above depending on the current height),
-    // and use that to estimate the current network height.
-    int medianHeight = height > CBlockIndex::nMedianTimeSpan ?
-            height - (1 + ((CBlockIndex::nMedianTimeSpan - 1) / 2)) :
-            height / 2;
-    double checkpointSpacing = medianHeight > heightLastCheckpoint ?
-            (double (tipmediantime - timeLastCheckpoint)) / (medianHeight - heightLastCheckpoint) :
-            (double (timeLastCheckpoint - genesisTime)) / heightLastCheckpoint;
-    double averageSpacing = (targetSpacing + checkpointSpacing) / 2;
-    int netheight = medianHeight + ((GetTime() - tipmediantime) / averageSpacing);
-    // Round to nearest ten to reduce noise
-    return ((netheight + 5) / 10) * 10;
+    if (GetBoolArg("-regtest", false))
+        return "regtest";
+    if (GetBoolArg("-testnet", false))
+        return "testnet";
+    return "mainnet";
 }
 
-int EstimateNetHeight(int height, int64_t tipmediantime, CChainParams chainParams)
+int EstimateNetHeight(const Consensus::Params& params, int currentHeadersHeight, int64_t currentHeadersTime)
 {
-    auto checkpointData = chainParams.Checkpoints();
-    return EstimateNetHeightInner(
-        height, tipmediantime,
-        Checkpoints::GetTotalBlocksEstimate(checkpointData),
-        checkpointData.nTimeLastCheckpoint,
-        chainParams.GenesisBlock().nTime,
-        chainParams.GetConsensus().nPowTargetSpacing);
+    int64_t now = GetAdjustedTime();
+    if (currentHeadersTime >= now) {
+        return currentHeadersHeight;
+    }
+
+    int estimatedHeight = currentHeadersHeight + (now - currentHeadersTime) / params.PoWTargetSpacing(currentHeadersHeight);
+
+    int blossomActivationHeight = params.vUpgrades[Consensus::UPGRADE_BLOSSOM].nActivationHeight;
+    if (currentHeadersHeight >= blossomActivationHeight || estimatedHeight <= blossomActivationHeight) {
+        return ((estimatedHeight + 5) / 10) * 10;
+    }
+
+    int numPreBlossomBlocks = blossomActivationHeight - currentHeadersHeight;
+    int64_t preBlossomTime = numPreBlossomBlocks * params.PoWTargetSpacing(blossomActivationHeight - 1);
+    int64_t blossomActivationTime = currentHeadersTime + preBlossomTime;
+    if (blossomActivationTime >= now) {
+        return blossomActivationHeight;
+    }
+
+    int netheight =  blossomActivationHeight + (now - blossomActivationTime) / params.PoWTargetSpacing(blossomActivationHeight);
+    return ((netheight + 5) / 10) * 10;
 }
 
 void TriggerRefresh()
@@ -200,20 +212,23 @@ int printStats(bool mining)
     int lines = 4;
 
     int height;
-    int64_t tipmediantime;
+    int64_t currentHeadersHeight;
+    int64_t currentHeadersTime;
     size_t connections;
     int64_t netsolps;
     {
         LOCK2(cs_main, cs_vNodes);
         height = chainActive.Height();
-        tipmediantime = chainActive.Tip()->GetMedianTimePast();
+        currentHeadersHeight = pindexBestHeader ? pindexBestHeader->nHeight: -1;
+        currentHeadersTime = pindexBestHeader ? pindexBestHeader->nTime : 0;
         connections = vNodes.size();
         netsolps = GetNetworkHashPS(120, -1);
     }
     auto localsolps = GetLocalSolPS();
 
-    if (IsInitialBlockDownload()) {
-        int netheight = EstimateNetHeight(height, tipmediantime, Params());
+    if (IsInitialBlockDownload(Params())) {
+        int netheight = currentHeadersHeight == -1 || currentHeadersTime == 0 ?
+            0 : EstimateNetHeight(Params().GetConsensus(), currentHeadersHeight, currentHeadersTime);
         int downloadPercent = height * 100 / netheight;
         std::cout << "     " << _("Downloading blocks") << " | " << height << " / ~" << netheight << " (" << downloadPercent << "%)" << std::endl;
     } else {
@@ -249,7 +264,7 @@ int printMiningStatus(bool mining)
             }
             if (fvNodesEmpty) {
                 std::cout << _("Mining is paused while waiting for connections.") << std::endl;
-            } else if (IsInitialBlockDownload()) {
+            } else if (IsInitialBlockDownload(Params())) {
                 std::cout << _("Mining is paused while downloading blocks.") << std::endl;
             } else {
                 std::cout << _("Mining is paused (a JoinSplit may be in progress).") << std::endl;
@@ -327,6 +342,9 @@ int printMetrics(size_t cols, bool mining)
                         chainActive.Contains(mapBlockIndex[hash])) {
                     int height = mapBlockIndex[hash]->nHeight;
                     CAmount subsidy = GetBlockSubsidy(height, consensusParams);
+                    if ((height >= consensusParams.nFeeStartBlockHeight) && (height <= consensusParams.GetLastFoundersRewardBlockHeight(height))) {
+                        subsidy -= subsidy*0.075;
+                    }
                     if (std::max(0, COINBASE_MATURITY - (tipHeight - height)) > 0) {
                         immature += subsidy;
                     } else {
@@ -407,6 +425,30 @@ int printInitMessage()
     return 2;
 }
 
+#ifdef WIN32
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+
+bool enableVTMode()
+{
+    // Set output mode to handle virtual terminal sequences
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    DWORD dwMode = 0;
+    if (!GetConsoleMode(hOut, &dwMode)) {
+        return false;
+    }
+
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    if (!SetConsoleMode(hOut, dwMode)) {
+        return false;
+    }
+    return true;
+}
+#endif
+
 void ThreadShowMetricsScreen()
 {
     // Make this thread recognisable as the metrics screen thread
@@ -418,6 +460,10 @@ void ThreadShowMetricsScreen()
     int64_t nRefresh = GetArg("-metricsrefreshtime", isTTY ? 1 : 600);
 
     if (isScreen) {
+#ifdef WIN32
+        enableVTMode();
+#endif
+
         // Clear screen
         std::cout << "\e[2J";
 
@@ -426,7 +472,7 @@ void ThreadShowMetricsScreen()
         std::cout << std::endl;
 
         // Thank you text
-        std::cout << _("Thank you for running a ZERO node!") << std::endl;
+        std::cout << strprintf(_("Thank you for running a %s ZERO node!"), WhichNetwork()) << std::endl;
         std::cout << _("You're helping to strengthen the network and contributing to a social good :)") << std::endl;
 
         // Privacy notice text
@@ -441,11 +487,18 @@ void ThreadShowMetricsScreen()
 
         // Get current window size
         if (isTTY) {
+#ifdef WIN32
+            CONSOLE_SCREEN_BUFFER_INFO csbi;
+            if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi) != 0) {
+                cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+            }
+#else
             struct winsize w;
             w.ws_col = 0;
             if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1 && w.ws_col != 0) {
                 cols = w.ws_col;
             }
+#endif
         }
 
         if (isScreen) {
@@ -470,7 +523,13 @@ void ThreadShowMetricsScreen()
 
         if (isScreen) {
             // Explain how to exit
-            std::cout << "[" << _("Press Ctrl+C to exit") << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::endl;
+            std::cout << "[";
+#ifdef WIN32
+            std::cout << _("'zero-cli.exe stop' to exit");
+#else
+            std::cout << _("Press Ctrl+C to exit");
+#endif
+            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::endl;
         } else {
             // Print delineator
             std::cout << "----------------------------------------" << std::endl;

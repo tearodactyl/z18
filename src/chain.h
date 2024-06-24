@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #ifndef BITCOIN_CHAIN_H
 #define BITCOIN_CHAIN_H
@@ -14,9 +14,63 @@
 
 #include <vector>
 
-#include <boost/foreach.hpp>
-
+extern bool fZindex;
 static const int SPROUT_VALUE_VERSION = 1001400;
+static const int SAPLING_VALUE_VERSION = 1010100;
+
+class CBlockFileInfo
+{
+public:
+    unsigned int nBlocks;      //!< number of blocks stored in file
+    unsigned int nSize;        //!< number of used bytes of block file
+    unsigned int nUndoSize;    //!< number of used bytes in the undo file
+    unsigned int nHeightFirst; //!< lowest height of block in file
+    unsigned int nHeightLast;  //!< highest height of block in file
+    uint64_t nTimeFirst;       //!< earliest time of block in file
+    uint64_t nTimeLast;        //!< latest time of block in file
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(VARINT(nBlocks));
+        READWRITE(VARINT(nSize));
+        READWRITE(VARINT(nUndoSize));
+        READWRITE(VARINT(nHeightFirst));
+        READWRITE(VARINT(nHeightLast));
+        READWRITE(VARINT(nTimeFirst));
+        READWRITE(VARINT(nTimeLast));
+    }
+
+     void SetNull() {
+         nBlocks = 0;
+         nSize = 0;
+         nUndoSize = 0;
+         nHeightFirst = 0;
+         nHeightLast = 0;
+         nTimeFirst = 0;
+         nTimeLast = 0;
+     }
+
+     CBlockFileInfo() {
+         SetNull();
+     }
+
+     std::string ToString() const;
+
+     /** update statistics (does not update nSize) */
+     void AddBlock(unsigned int nHeightIn, uint64_t nTimeIn) {
+         if (nBlocks==0 || nHeightFirst > nHeightIn)
+             nHeightFirst = nHeightIn;
+         if (nBlocks==0 || nTimeFirst > nTimeIn)
+             nTimeFirst = nTimeIn;
+         nBlocks++;
+         if (nHeightIn > nHeightLast)
+             nHeightLast = nHeightIn;
+         if (nTimeIn > nTimeLast)
+             nTimeLast = nTimeIn;
+     }
+};
 
 struct CDiskBlockPos
 {
@@ -26,7 +80,7 @@ struct CDiskBlockPos
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+    inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(VARINT(nFile));
         READWRITE(VARINT(nPos));
     }
@@ -94,7 +148,13 @@ enum BlockStatus: uint32_t {
     BLOCK_FAILED_VALID       =   32, //! stage after last reached validness failed
     BLOCK_FAILED_CHILD       =   64, //! descends from failed block
     BLOCK_FAILED_MASK        =   BLOCK_FAILED_VALID | BLOCK_FAILED_CHILD,
+
+    BLOCK_ACTIVATES_UPGRADE  =   128, //! block activates a network upgrade
 };
+
+//! Short-hand for the highest consensus validity we implement.
+//! Blocks with this validity are assumed to satisfy all consensus rules.
+static const BlockStatus BLOCK_VALID_CONSENSUS = BLOCK_VALID_SCRIPTS;
 
 /** The block chain is a tree shaped structure starting with the
  * genesis block at the root, with each block potentially having multiple
@@ -132,19 +192,120 @@ public:
     //! Note: in a potential headers-first mode, this number cannot be relied upon
     unsigned int nTx;
 
+    //! Number of notarization transactions in this block.
+    int64_t nNotarizations;
+
+    //! (memory only) Number of payments (shielded or transparent) in the block
+    //! up to and including this block.  One transaction can contain one or more
+    //! payments. This stat allows us to calculate ratios of shielded/transparent
+    //! when combined with shielded payment stats
+    int64_t nPayments;
+
+    //! (memory only) Number of shielded transactions (of any kind) in the block up to and including this block.
+    //! A shielded transaction is defined as a transaction that contains at least 1 JoinSplit, which includes
+    //! shielding/de-shielding and other complex transaction possibilties including multiple taddrs/zaddrs as
+    //! inputs and outputs.
+    int64_t nShieldedTx;
+
+    //! (memory only) Number of shielded outputs in the block up to and including this block.
+    int64_t nShieldedOutputs;
+
+    //! (memory only) Number of fully shielded transactions. A fully shielded transaction is defined
+    //! as a transaction containing JoinSplits and only shielded inputs and outputs, i.e. no transparent
+    // inputs or outputs: z->z or z->(z,z) or z->(z,z,z,) etc...
+    int64_t nFullyShieldedTx;
+
+    //! (memory only) Number of shielding payments. A shielding payment is defined
+    //! as having a shielded output but transparent input: t->z
+    int64_t nShieldingPayments;
+
+    //! (memory only) Number of shielded payments. A shielded payment is defined
+    //! as having a shielded input or output: t->z or z->t
+    int64_t nShieldedPayments;
+
+    //! (memory only) Number of fully shielded payments. A fully shielded payment is defined
+    //! as having a shielded input and shielded output: z->z
+    int64_t nFullyShieldedPayments;
+
+    //! (memory only) Number of deshielding transactions. A deshielding transaction is defined
+    //! as a transaction containing JoinSplits and at least one transparent output.
+    int64_t nDeshieldingTx;
+
+    //! (memory only) Number of deshielding payments. A deshielding payment is defined
+    //! as one transparent input and one shielded output: z->t
+    int64_t nDeshieldingPayments;
+
+    //! (memory only) Number of shielding transactions. A shielding transaction is defined
+    //! as a transaction containing JoinSplits and at least one transparent input
+    // i.e. t->z or t->(z,t) or z->(z,z,t)
+    int64_t nShieldingTx;
+
     //! (memory only) Number of transactions in the chain up to and including this block.
     //! This value will be non-zero only if and only if transactions for this block and all its parents are available.
     //! Change to 64-bit type when necessary; won't happen before 2030
     unsigned int nChainTx;
 
+    //! Number of notarization transactions in this chain
+    int64_t nChainNotarizations;
+
+    //! (memory only) Number of payments (shielded or transparent) in the chain
+    //! up to and including this block.  One transaction can contain one or more
+    //! payments. This stat allows us to calculate ratios of shielded/transparent
+    //! when combined with shielded payment stats
+    int64_t nChainPayments;
+
+    //! (memory only) Number of shielded transactions (of any kind) in the chain up to and including this block.
+    //! A shielded transaction is defined as a transaction that contains at least 1 JoinSplit, which includes
+    //! shielding/de-shielding and other complex transaction possibilties including multiple taddrs/zaddrs as
+    //! inputs and outputs.
+    int64_t nChainShieldedTx;
+
+    //! (memory only) Number of shielded outputs in the chain up to and including this block.
+    int64_t nChainShieldedOutputs;
+
+    //! (memory only) Number of fully shielded transactions. A fully shielded transaction is defined
+    //! as a transaction containing JoinSplits and only shielded inputs and outputs, i.e. no transparent
+    // inputs or outputs: z->z or z->(z,z) or z->(z,z,z,) etc...
+    int64_t nChainFullyShieldedTx;
+
+    //! (memory only) Number of shielding payments. A shielding payment is defined
+    //! as having a shielded output but transparent input: t->z
+    int64_t nChainShieldingPayments;
+
+    //! (memory only) Number of shielded payments. A shielded payment is defined
+    //! as having a shielded input or output: t->z or z->t
+    int64_t nChainShieldedPayments;
+
+    //! (memory only) Number of fully shielded payments. A fully shielded payment is defined
+    //! as having a shielded input and shielded output: z->z
+    int64_t nChainFullyShieldedPayments;
+
+    //! (memory only) Number of deshielding transactions. A deshielding transaction is defined
+    //! as a transaction containing JoinSplits and at least one transparent output.
+    int64_t nChainDeshieldingTx;
+
+    //! (memory only) Number of deshielding payments. A deshielding payment is defined
+    //! as one transparent input and one shielded output: z->t
+    int64_t nChainDeshieldingPayments;
+
+    //! (memory only) Number of shielding transactions. A shielding transaction is defined
+    //! as a transaction containing JoinSplits and at least one transparent input
+    // i.e. t->z or t->(z,t) or z->(z,z,t)
+    int64_t nChainShieldingTx;
+
     //! Verification status of this block. See enum BlockStatus
     unsigned int nStatus;
 
+    //! Branch ID corresponding to the consensus rules used to validate this block.
+    //! Only cached if block validity is BLOCK_VALID_CONSENSUS.
+    //! Persisted at each activation height, memory-only for intervening blocks.
+    boost::optional<uint32_t> nCachedBranchId;
+
     //! The anchor for the tree state up to the start of this block
-    uint256 hashAnchor;
+    uint256 hashSproutAnchor;
 
     //! (memory only) The anchor for the tree state up to the end of this block
-    uint256 hashAnchorEnd;
+    uint256 hashFinalSproutRoot;
 
     //! Change in value held by the Sprout circuit over this block.
     //! Will be boost::none for older blocks on old nodes until a reindex has taken place.
@@ -155,10 +316,19 @@ public:
     //! Will be boost::none if nChainTx is zero.
     boost::optional<CAmount> nChainSproutValue;
 
+    //! Change in value held by the Sapling circuit over this block.
+    //! Not a boost::optional because this was added before Sapling activated, so we can
+    //! rely on the invariant that every block before this was added had nSaplingValue = 0.
+    CAmount nSaplingValue;
+
+    //! (memory only) Total value held by the Sapling circuit up to and including this block.
+    //! Will be boost::none if nChainTx is zero.
+    boost::optional<CAmount> nChainSaplingValue;
+
     //! block header
     int nVersion;
     uint256 hashMerkleRoot;
-    uint256 hashReserved;
+    uint256 hashFinalSaplingRoot;
     unsigned int nTime;
     unsigned int nBits;
     uint256 nNonce;
@@ -179,16 +349,46 @@ public:
         nChainWork = arith_uint256();
         nTx = 0;
         nChainTx = 0;
+
+        // Shieldex Index chain stats
+        nChainPayments = 0;
+        nChainShieldedTx = 0;
+        nChainShieldingTx = 0;
+        nChainDeshieldingTx = 0;
+        nChainNotarizations = 0;
+        nChainFullyShieldedTx = 0;
+        nChainShieldedOutputs = 0;
+        nChainShieldedPayments = 0;
+        nChainShieldingPayments = 0;
+        nChainDeshieldingPayments = 0;
+        nChainFullyShieldedPayments = 0;
+
+        // Shieldex Index stats
+        nPayments = 0;
+        nShieldedTx = 0;
+        nShieldingTx = 0;
+        nNotarizations = 0;
+        nDeshieldingTx = 0;
+        nShieldedOutputs = 0;
+        nFullyShieldedTx = 0;
+        nShieldedPayments = 0;
+        nShieldingPayments = 0;
+        nDeshieldingPayments = 0;
+        nFullyShieldedPayments = 0;
+
         nStatus = 0;
-        hashAnchor = uint256();
-        hashAnchorEnd = uint256();
+        nCachedBranchId = boost::none;
+        hashSproutAnchor = uint256();
+        hashFinalSproutRoot = uint256();
         nSequenceId = 0;
         nSproutValue = boost::none;
         nChainSproutValue = boost::none;
+        nSaplingValue = 0;
+        nChainSaplingValue = boost::none;
 
         nVersion       = 0;
         hashMerkleRoot = uint256();
-        hashReserved   = uint256();
+        hashFinalSaplingRoot   = uint256();
         nTime          = 0;
         nBits          = 0;
         nNonce         = uint256();
@@ -206,7 +406,7 @@ public:
 
         nVersion       = block.nVersion;
         hashMerkleRoot = block.hashMerkleRoot;
-        hashReserved   = block.hashReserved;
+        hashFinalSaplingRoot   = block.hashFinalSaplingRoot;
         nTime          = block.nTime;
         nBits          = block.nBits;
         nNonce         = block.nNonce;
@@ -238,7 +438,7 @@ public:
         if (pprev)
             block.hashPrevBlock = pprev->GetBlockHash();
         block.hashMerkleRoot = hashMerkleRoot;
-        block.hashReserved   = hashReserved;
+        block.hashFinalSaplingRoot   = hashFinalSaplingRoot;
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
@@ -328,8 +528,9 @@ public:
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        if (!(nType & SER_GETHASH))
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        int nVersion = s.GetVersion();
+        if (!(s.GetType() & SER_GETHASH))
             READWRITE(VARINT(nVersion));
 
         READWRITE(VARINT(nHeight));
@@ -341,13 +542,25 @@ public:
             READWRITE(VARINT(nDataPos));
         if (nStatus & BLOCK_HAVE_UNDO)
             READWRITE(VARINT(nUndoPos));
-        READWRITE(hashAnchor);
+        if (nStatus & BLOCK_ACTIVATES_UPGRADE) {
+            if (ser_action.ForRead()) {
+                uint32_t branchId;
+                READWRITE(branchId);
+                nCachedBranchId = branchId;
+            } else {
+                // nCachedBranchId must always be set if BLOCK_ACTIVATES_UPGRADE is set.
+                assert(nCachedBranchId);
+                uint32_t branchId = *nCachedBranchId;
+                READWRITE(branchId);
+            }
+        }
+        READWRITE(hashSproutAnchor);
 
         // block header
         READWRITE(this->nVersion);
         READWRITE(hashPrev);
         READWRITE(hashMerkleRoot);
-        READWRITE(hashReserved);
+        READWRITE(hashFinalSaplingRoot);
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
@@ -355,9 +568,34 @@ public:
 
         // Only read/write nSproutValue if the client version used to create
         // this index was storing them.
-        if ((nType & SER_DISK) && (nVersion >= SPROUT_VALUE_VERSION)) {
+        if ((s.GetType() & SER_DISK) && (nVersion >= SPROUT_VALUE_VERSION)) {
             READWRITE(nSproutValue);
         }
+
+        // Only read/write nSaplingValue if the client version used to create
+        // this index was storing them.
+        if ((s.GetType() & SER_DISK) && (nVersion >= SAPLING_VALUE_VERSION)) {
+            READWRITE(nSaplingValue);
+        }
+
+        // These values only serialized when -zindex enabled
+        // Order is important!
+        if((s.GetType() & SER_DISK) && fZindex) {
+            READWRITE(nShieldedTx);
+            READWRITE(nShieldingTx);
+            READWRITE(nDeshieldingTx);
+            READWRITE(nFullyShieldedTx);
+            READWRITE(nPayments);
+            READWRITE(nNotarizations);
+            READWRITE(nShieldedPayments);
+            READWRITE(nShieldingPayments);
+            READWRITE(nDeshieldingPayments);
+            READWRITE(nFullyShieldedPayments);
+            READWRITE(nShieldedOutputs);
+        }
+
+        // If you have just added new serialized fields above, remember to add
+        // them to CBlockTreeDB::LoadBlockIndexGuts() in txdb.cpp :)
     }
 
     uint256 GetBlockHash() const
@@ -366,7 +604,7 @@ public:
         block.nVersion        = nVersion;
         block.hashPrevBlock   = hashPrev;
         block.hashMerkleRoot  = hashMerkleRoot;
-        block.hashReserved    = hashReserved;
+        block.hashFinalSaplingRoot    = hashFinalSaplingRoot;
         block.nTime           = nTime;
         block.nBits           = nBits;
         block.nNonce          = nNonce;

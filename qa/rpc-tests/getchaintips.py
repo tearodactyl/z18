@@ -1,19 +1,36 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # Copyright (c) 2014 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
-# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 # Exercise the getchaintips API.  We introduce a network split, work
 # on chains of different lengths, and join the network together again.
 # This gives us two tips, verify that it works.
 
+import sys; assert sys.version_info < (3,), ur"This script does not run under Python 3. Please use Python 2.7.x."
+
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import assert_equal, initialize_chain_clean, \
+    start_nodes, connect_nodes_bi
 
 class GetChainTipsTest (BitcoinTestFramework):
 
+    def setup_chain(self):
+        print("Initializing test directory "+self.options.tmpdir)
+        initialize_chain_clean(self.options.tmpdir, 4)
+
+    def setup_network(self, split=False):
+        self.nodes = start_nodes(4, self.options.tmpdir, extra_args=[["-debug=zrpcunsafe", "-txindex"]] * 4 )
+        connect_nodes_bi(self.nodes,0,1)
+        connect_nodes_bi(self.nodes,1,2)
+        connect_nodes_bi(self.nodes,0,2)
+        connect_nodes_bi(self.nodes,0,3)
+        self.is_network_split=False
+        self.nodes[0].generate(200)
+        self.sync_all ()
+
     def run_test (self):
-        BitcoinTestFramework.run_test (self)
+        #BitcoinTestFramework.run_test (self)
 
         tips = self.nodes[0].getchaintips ()
         assert_equal (len (tips), 1)

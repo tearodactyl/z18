@@ -1,13 +1,12 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #ifndef BITCOIN_CHAINPARAMS_H
 #define BITCOIN_CHAINPARAMS_H
 
 #include "chainparamsbase.h"
-#include "checkpoints.h"
 #include "consensus/params.h"
 #include "primitives/block.h"
 #include "protocol.h"
@@ -24,6 +23,14 @@ struct SeedSpec6 {
     uint16_t port;
 };
 
+typedef std::map<int, uint256> MapCheckpoints;
+
+struct CCheckpointData {
+    MapCheckpoints mapCheckpoints;
+    int64_t nTimeLastCheckpoint;
+    int64_t nTransactionsLastCheckpoint;
+    double fTransactionsPerDay;
+};
 
 /**
  * CChainParams defines various tweakable parameters of a given instance of the
@@ -49,10 +56,25 @@ public:
         MAX_BASE58_TYPES
     };
 
+    enum Bech32Type {
+        SAPLING_PAYMENT_ADDRESS,
+        SAPLING_FULL_VIEWING_KEY,
+        SAPLING_INCOMING_VIEWING_KEY,
+        SAPLING_EXTENDED_SPEND_KEY,
+        SAPLING_EXTENDED_FVK,
+
+        MAX_BECH32_TYPES
+    };
+
     const Consensus::Params& GetConsensus() const { return consensus; }
     const CMessageHeader::MessageStartChars& MessageStart() const { return pchMessageStart; }
     const std::vector<unsigned char>& AlertKey() const { return vAlertPubKey; }
     int GetDefaultPort() const { return nDefaultPort; }
+
+    CAmount SproutValuePoolCheckpointHeight() const { return nSproutValuePoolCheckpointHeight; }
+    CAmount SproutValuePoolCheckpointBalance() const { return nSproutValuePoolCheckpointBalance; }
+    uint256 SproutValuePoolCheckpointBlockHash() const { return hashSproutValuePoolCheckpointBlock; }
+    bool ZIP209Enabled() const { return fZIP209Enabled; }
 
     const CBlock& GenesisBlock() const { return genesis; }
     /** Make miner wait to have peers to avoid wasting work */
@@ -61,11 +83,9 @@ public:
     bool DefaultConsistencyChecks() const { return fDefaultConsistencyChecks; }
     /** Policy: Filter transactions that do not match well-defined patterns */
     bool RequireStandard() const { return fRequireStandard; }
-    int64_t MaxTipAge() const { return nMaxTipAge; }
     int64_t PruneAfterHeight() const { return nPruneAfterHeight; }
-    unsigned int EquihashN() const { return nEquihashN; }
-    unsigned int EquihashK() const { return nEquihashK; }
     std::string CurrencyUnits() const { return strCurrencyUnits; }
+    uint32_t BIP44CoinType() const { return bip44CoinType; }
     /** Make miner stop after a block is found. In RPC, don't return until nGenProcLimit blocks are generated */
     bool MineBlocksOnDemand() const { return fMineBlocksOnDemand; }
     /** In the future use NetworkIDString() for RPC fields */
@@ -74,8 +94,24 @@ public:
     std::string NetworkIDString() const { return strNetworkID; }
     const std::vector<CDNSSeedData>& DNSSeeds() const { return vSeeds; }
     const std::vector<unsigned char>& Base58Prefix(Base58Type type) const { return base58Prefixes[type]; }
+    const std::string& Bech32HRP(Bech32Type type) const { return bech32HRPs[type]; }
     const std::vector<SeedSpec6>& FixedSeeds() const { return vFixedSeeds; }
-    const Checkpoints::CCheckpointData& Checkpoints() const { return checkpointData; }
+    const CCheckpointData& Checkpoints() const { return checkpointData; }
+
+    /** Start Zeronode **/
+    /** The zeronode count that we will allow the see-saw reward payments to be off by */
+    int ZeronodeCountDrift() const { return nZeronodeCountDrift; }
+    std::string SporkKey() const { return strSporkKey; }
+    std::string ZeronodeDummyAddress() const { return strZeronodeDummyAddress; }
+    /** Headers first syncing is disabled */
+    bool HeadersFirstSyncingActive() const { return fHeadersFirstSyncingActive; };
+    int64_t Budget_Fee_Confirmations() const { return nBudget_Fee_Confirmations; }
+    /**End Zeronode **/
+
+    /** Return the founder's reward address and script for a given block height */
+    std::string GetFoundersRewardAddressAtHeight(int height) const;
+    CScript GetFoundersRewardScriptAtHeight(int height) const;
+    std::string GetFoundersRewardAddressAtIndex(int i) const;
     /** Enforce coinbase consensus rule in regtest mode */
     void SetRegTestCoinbaseMustBeProtected() { consensus.fCoinbaseMustBeProtected = true; }
 protected:
@@ -86,14 +122,13 @@ protected:
     //! Raw pub key bytes for the broadcast alert signing key.
     std::vector<unsigned char> vAlertPubKey;
     int nDefaultPort = 0;
-    long nMaxTipAge = 0;
     uint64_t nPruneAfterHeight = 0;
-    unsigned int nEquihashN = 0;
-    unsigned int nEquihashK = 0;
     std::vector<CDNSSeedData> vSeeds;
     std::vector<unsigned char> base58Prefixes[MAX_BASE58_TYPES];
+    std::string bech32HRPs[MAX_BECH32_TYPES];
     std::string strNetworkID;
     std::string strCurrencyUnits;
+    uint32_t bip44CoinType;
     CBlock genesis;
     std::vector<SeedSpec6> vFixedSeeds;
     bool fMiningRequiresPeers = false;
@@ -101,7 +136,22 @@ protected:
     bool fRequireStandard = false;
     bool fMineBlocksOnDemand = false;
     bool fTestnetToBeDeprecatedFieldRPC = false;
-    Checkpoints::CCheckpointData checkpointData;
+
+    /** Start Zeronode **/
+    int nZeronodeCountDrift;
+    std::string strSporkKey;
+    bool fHeadersFirstSyncingActive;
+    std::string strZeronodeDummyAddress;
+    int64_t nBudget_Fee_Confirmations;
+    /** Start Zeronode **/
+
+    CCheckpointData checkpointData;
+    std::vector<std::string> vFoundersRewardAddress;
+
+    CAmount nSproutValuePoolCheckpointHeight = 0;
+    CAmount nSproutValuePoolCheckpointBalance = 0;
+    uint256 hashSproutValuePoolCheckpointBlock;
+    bool fZIP209Enabled = false;
 };
 
 /**
@@ -121,5 +171,12 @@ void SelectParams(CBaseChainParams::Network network);
  * Returns false if an invalid combination is given.
  */
 bool SelectParamsFromCommandLine();
+
+/**
+ * Allows modifying the network upgrade regtest parameters.
+ */
+void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight);
+
+void UpdateRegtestPow(int64_t nPowMaxAdjustDown, int64_t nPowMaxAdjustUp, uint256 powLimit);
 
 #endif // BITCOIN_CHAINPARAMS_H

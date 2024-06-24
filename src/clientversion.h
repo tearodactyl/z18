@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2014 The Bitcoin Core developers
-// Copyright (c) 2016-2017 The Zcash developers
+// Copyright (c) 2016-2019 The Zcash developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 #ifndef BITCOIN_CLIENTVERSION_H
 #define BITCOIN_CLIENTVERSION_H
@@ -15,19 +15,20 @@
  */
 
 //! These need to be macros, as clientversion.cpp's and bitcoin*-res.rc's voodoo requires it
-#define CLIENT_VERSION_MAJOR 1
-#define CLIENT_VERSION_MINOR 0
-#define CLIENT_VERSION_REVISION 141
-#define CLIENT_VERSION_BUILD 1
+// Values actually set in configure.ac; set here to unlikely and easy to notice values
+#define CLIENT_VERSION_MAJOR 8
+#define CLIENT_VERSION_MINOR 8
+#define CLIENT_VERSION_REVISION 8
+#define CLIENT_VERSION_BUILD 8
 
 //! Set to true for release, false for prerelease or test build
-#define CLIENT_VERSION_IS_RELEASE true
+#define CLIENT_VERSION_IS_RELEASE false
 
 /**
  * Copyright year (2009-this)
  * Todo: update this when changing our copyright comments in the source
  */
-#define COPYRIGHT_YEAR 2018
+#define COPYRIGHT_YEAR 2022
 
 #endif //HAVE_CONFIG_H
 

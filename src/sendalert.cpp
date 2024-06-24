@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Zcash developers
+// Copyright (c) 2016-2018 The Zcash developers
 // Original code from: https://gist.github.com/laanwj/0e689cfa37b52bcbbb44
 
 /*
@@ -27,7 +27,7 @@ Modify the alert parameters, id and message found in this file.
 
 Build and run with -sendalert or -printalert.
 
-./zcashd -printtoconsole -sendalert
+./zerod -printtoconsole -sendalert
 
 One minute after starting up, the alert will be broadcast. It is then
 flooded through the network until the nRelayUntil time, and will be
@@ -71,14 +71,16 @@ void ThreadSendAlert()
     //
     CAlert alert;
     alert.nRelayUntil   = GetTime() + 15 * 60;
-    alert.nExpiration   = GetTime() + 12 * 30 * 24 * 60 * 60;
-    alert.nID           = 1004;  // use https://github.com/zcash/zcash/wiki/specification#assigned-numbers to keep track of alert IDs
-    alert.nCancel       = 1001;  // cancels previous messages up to this ID number
+    alert.nExpiration   = GetTime() + 10 * 365 * 24 * 60 * 60;
+    alert.nID           = 1006;  // use https://github.com/zcash/zcash/wiki/specification#assigned-numbers to keep track of alert IDs
+    alert.nCancel       = 1005;  // cancels previous messages up to this ID number
 
     // These versions are protocol versions
     // 170002 : 1.0.0
+    // 170006 : 1.1.2
+    // 170007 : 2.0.0
     alert.nMinVer       = 170002;
-    alert.nMaxVer       = 170002;
+    alert.nMaxVer       = 170006;
 
     //
     // main.cpp:
@@ -88,14 +90,14 @@ void ThreadSendAlert()
     //  4000 or higher will put the RPC into safe mode
     alert.nPriority     = 4000;
     alert.strComment    = "";
-    alert.strStatusBar  = "Your client version";
+    alert.strStatusBar  = "Your client is out of date and incompatible with the Sapling network upgrade. Please update to a recent version of Zero (2.0.1 or later).";
     alert.strRPCError   = alert.strStatusBar;
 
     // Set specific client version/versions here. If setSubVer is empty, no filtering on subver is done:
-    const std::vector<std::string> useragents = {"Pyramiden", "Longyearbyen", "Barentsburg", "Qaanaaq"};
+    const std::vector<std::string> useragents = {"Isfjorden","Ny-Alesund"};
 
     BOOST_FOREACH(const std::string& useragent, useragents) {
-        alert.setSubVer.insert(std::string("/"+useragent+":1.0.141/"));
+        alert.setSubVer.insert(std::string("/"+useragent+":2.0.1/"));
     }
 
     // Sanity check

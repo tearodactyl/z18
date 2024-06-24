@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 /**
  * Server/client environment: argument handling, config file parsing,
@@ -33,6 +33,11 @@ static const bool DEFAULT_LOGTIMEMICROS = false;
 static const bool DEFAULT_LOGIPS        = false;
 static const bool DEFAULT_LOGTIMESTAMPS = true;
 
+extern bool fEnableSwiftTX;
+extern int nSwiftTXDepth;
+extern bool fZeroNode;
+extern bool fLiteMode;
+
 /** Signals for translation. */
 class CTranslationInterface
 {
@@ -40,6 +45,11 @@ public:
     /** Translate a message to the native language of the user. */
     boost::signals2::signal<std::string (const char* psz)> Translate;
 };
+
+//Zeronode only features
+extern std::string strZeroNodeAddr;
+extern std::vector<int64_t> obfuScationDenominations;
+extern std::string strBudgetMode;
 
 extern std::map<std::string, std::string> mapArgs;
 extern std::map<std::string, std::vector<std::string> > mapMultiArgs;
@@ -52,6 +62,8 @@ extern bool fLogTimestamps;
 extern bool fLogIPs;
 extern std::atomic<bool> fReopenDebugLog;
 extern CTranslationInterface translationInterface;
+
+[[noreturn]] extern void new_handler_terminate();
 
 /**
  * Translation function: Call Translate signal on UI interface, which returns a boost::optional result.
@@ -124,6 +136,7 @@ boost::filesystem::path GetDefaultDataDir();
 const boost::filesystem::path &GetDataDir(bool fNetSpecific = true);
 void ClearDatadirCache();
 boost::filesystem::path GetConfigFile();
+boost::filesystem::path GetZeronodeConfigFile();
 #ifndef WIN32
 boost::filesystem::path GetPidFile();
 void CreatePidFile(const boost::filesystem::path &path, pid_t pid);

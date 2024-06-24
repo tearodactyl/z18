@@ -1,12 +1,12 @@
 # Block and Transaction Broadcasting With ZeroMQ
 
 [ZeroMQ](http://zeromq.org/) is a lightweight wrapper around TCP
-connections, inter-process communication, and shared-memory,
-providing various message-oriented semantics such as publish/subcribe,
+connections, inter-process communication, and shared-memory, providing
+various message-oriented semantics such as publish/subscribe,
 request/reply, and push/pull.
 
 The Zcash daemon can be configured to act as a trusted "border
-router", implementing the zcash wire protocol and relay, making
+router", implementing the Zcash wire protocol and relay, making
 consensus decisions, maintaining the local blockchain database,
 broadcasting locally generated transactions into the network, and
 providing a queryable RPC interface to interact on a polled basis for
@@ -42,11 +42,25 @@ In order to run the example Python client scripts in contrib/ one must
 also install *python-zmq*, though this is not necessary for daemon
 operation.
 
+## Security WARNING
+
+Enabling this feature even on the loopback interface only (e.g. binding
+it to localhost or 127.0.0.1) will still expose it to the wilds of the
+Internet, because of an attack vector called DNS rebinding. DNS
+rebinding allows an attacker located remotely on the Internet to trick
+applications that you're running on the same computer as Zcashd to
+contact your supposedly localhost-only ZMQ port, then, depending on the
+program they may be able to attempt to attack it.
+
+Do not enable this feature unless you are sure that you know what you
+are doing, and that you have a strong reason for thinking that you are
+not vulnerable to this type of attack.
+
 ## Enabling
 
 By default, the ZeroMQ feature is automatically compiled in if the
 necessary prerequisites are found.  To disable, use --disable-zmq
-during the *configure* step of building zcashd:
+during the *configure* step of building zerod:
 
     $ ./configure --disable-zmq (other options)
 
@@ -67,8 +81,8 @@ address. The same address can be used in more than one notification.
 
 For instance:
 
-    $ zcashd -zmqpubhashtx=tcp://127.0.0.1:28332 \
-               -zmqpubrawtx=ipc:///tmp/zcashd.tx.raw
+    $ zerod -zmqpubhashtx=tcp://127.0.0.1:28332 \
+               -zmqpubrawtx=ipc:///tmp/zerod.tx.raw
 
 Each PUB notification has a topic and body, where the header
 corresponds to the notification type. For instance, for the
@@ -88,9 +102,9 @@ arriving. Please see `contrib/zmq/zmq_sub.py` for a working example.
 
 ## Remarks
 
-From the perspective of zcashd, the ZeroMQ socket is write-only; PUB
+From the perspective of zerod, the ZeroMQ socket is write-only; PUB
 sockets don't even have a read function. Thus, there is no state
-introduced into zcashd directly. Furthermore, no information is
+introduced into zerod directly. Furthermore, no information is
 broadcast that wasn't already received from the public P2P network.
 
 No authentication or authorization is done on connecting clients; it
@@ -102,6 +116,6 @@ and just the tip will be notified. It is up to the subscriber to
 retrieve the chain from the last known block to the new tip.
 
 There are several possibilities that ZMQ notification can get lost
-during transmission depending on the communication type your are
-using. Zcashd appends an up-counting sequence number to each
+during transmission depending on the communication type you are
+using. Zerod appends an up-counting sequence number to each
 notification which allows listeners to detect lost notifications.
